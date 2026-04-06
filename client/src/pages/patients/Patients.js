@@ -14,12 +14,28 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../contexts/AuthContext';
+import { useQueryClient } from 'react-query';
 
 const Patients = () => {
   const { hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    gender: 'male',
+    phone: '',
+    email: '',
+    addressStreet: '',
+    addressCity: '',
+    clinicId: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const queryClient = useQueryClient();
 
   // Fetch patients
   const { data: patientsData, isLoading, error } = useQuery(
@@ -49,6 +65,7 @@ const Patients = () => {
   };
 
   const getAge = (dateOfBirth) => {
+    if (!dateOfBirth) return 'N/A';
     const today = new Date();
     const birthDate = new Date(dateOfBirth);
     let age = today.getFullYear() - birthDate.getFullYear();
@@ -59,6 +76,53 @@ const Patients = () => {
     }
     
     return age;
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      // Get clinic ID from current user
+      const userResponse = await api.get('/auth/profile');
+      const clinicId = userResponse.data.user?.clinicId || userResponse.data.user?.clinic?.id;
+      
+      const patientData = {
+        ...formData,
+        clinicId: clinicId || '550e8400-e29b-41d4-a716-446655440001' // Default demo clinic
+      };
+      
+      await api.post('/patients', patientData);
+      
+      // Reset form and close modal
+      setFormData({
+        firstName: '',
+        lastName: '',
+        dateOfBirth: '',
+        gender: 'male',
+        phone: '',
+        email: '',
+        addressStreet: '',
+        addressCity: '',
+        clinicId: ''
+      });
+      setIsModalOpen(false);
+      
+      // Refresh patient list
+      queryClient.invalidateQueries(['patients']);
+      
+      alert('Patient created successfully!');
+    } catch (error) {
+      console.error('Error creating patient:', error);
+      alert(error.response?.data?.error || 'Failed to create patient');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isLoading) {
@@ -97,12 +161,13 @@ const Patients = () => {
               Manage patient records and information
             </p>
           </div>
-          {hasPermission('patients.create') && (
-            <button className="btn btn-primary">
-              <PlusIcon className="h-4 w-4 mr-2" />
-              New Patient
-            </button>
-          )}
+          <button 
+            className="btn btn-primary"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Patient
+          </button>
         </div>
       </div>
 
@@ -184,10 +249,10 @@ const Patients = () => {
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">
-                              {patient.personalInfo.firstName} {patient.personalInfo.lastName}
+                              {patient.personalInfo?.firstName} {patient.personalInfo?.lastName}
                             </div>
                             <div className="text-sm text-gray-500">
-                              ID: {patient.registrationInfo.patientId}
+                              ID: {patient.registrationInfo?.patientId}
                             </div>
                           </div>
                         </div>
@@ -196,9 +261,9 @@ const Patients = () => {
                         <div className="space-y-1">
                           <div className="flex items-center text-sm text-gray-900">
                             <PhoneIcon className="h-4 w-4 text-gray-400 mr-1" />
-                            {patient.personalInfo.phone}
+                            {patient.personalInfo?.phone}
                           </div>
-                          {patient.personalInfo.email && (
+                          {patient.personalInfo?.email && (
                             <div className="flex items-center text-sm text-gray-500">
                               <EnvelopeIcon className="h-4 w-4 text-gray-400 mr-1" />
                               {patient.personalInfo.email}
@@ -209,21 +274,21 @@ const Patients = () => {
                       <td className="table-cell">
                         <div className="text-sm">
                           <div className="text-gray-900">
-                            {getAge(patient.personalInfo.dateOfBirth)} years
+                            {getAge(patient.personalInfo?.dateOfBirth)} years
                           </div>
                           <div className="text-gray-500 capitalize">
-                            {patient.personalInfo.gender}
+                            {patient.personalInfo?.gender}
                           </div>
                         </div>
                       </td>
                       <td className="table-cell">
                         <span className="text-sm font-mono text-gray-900">
-                          {patient.registrationInfo.patientId}
+                          {patient.registrationInfo?.patientId}
                         </span>
                       </td>
                       <td className="table-cell">
-                        <span className={`badge ${getStatusColor(patient.registrationInfo.status)} capitalize`}>
-                          {patient.registrationInfo.status}
+                        <span className={`badge ${getStatusColor(patient.registrationInfo?.status)} capitalize`}>
+                          {patient.registrationInfo?.status}
                         </span>
                       </td>
                       <td className="table-cell">
@@ -325,7 +390,7 @@ const Patients = () => {
                   </dt>
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-gray-900">
-                      {patientsData?.patients?.filter(p => p.registrationInfo.status === 'active').length || 0}
+                      {patientsData?.patients?.filter(p => p.registrationInfo?.status === 'active').length || 0}
                     </div>
                   </dd>
                 </dl>
@@ -348,7 +413,7 @@ const Patients = () => {
                   <dd className="flex items-baseline">
                     <div className="text-2xl font-semibold text-gray-900">
                       {patientsData?.patients?.filter(p => {
-                        const regDate = new Date(p.registrationInfo.registrationDate);
+                        const regDate = new Date(p.registrationInfo?.registrationDate);
                         const thisMonth = new Date();
                         return regDate.getMonth() === thisMonth.getMonth() && 
                                regDate.getFullYear() === thisMonth.getFullYear();
@@ -378,7 +443,7 @@ const Patients = () => {
                     <div className="text-2xl font-semibold text-gray-900">
                       {patientsData?.patients?.length > 0 
                         ? Math.round(
-                            patientsData.patients.reduce((sum, p) => sum + getAge(p.personalInfo.dateOfBirth), 0) / 
+                            patientsData.patients.reduce((sum, p) => sum + getAge(p.personalInfo?.dateOfBirth), 0) / 
                             patientsData.patients.length
                           )
                         : 0}
@@ -390,6 +455,145 @@ const Patients = () => {
           </div>
         </div>
       </div>
+
+      {/* New Patient Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+              onClick={() => setIsModalOpen(false)}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">New Patient</h3>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label">First Name *</label>
+                    <input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Last Name *</label>
+                    <input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Date of Birth *</label>
+                    <input
+                      type="date"
+                      name="dateOfBirth"
+                      value={formData.dateOfBirth}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Gender *</label>
+                    <select
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleInputChange}
+                      className="form-select"
+                      required
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Phone *</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="form-input"
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="form-label">Address</label>
+                    <input
+                      type="text"
+                      name="addressStreet"
+                      value={formData.addressStreet}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Street address"
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <input
+                      type="text"
+                      name="addressCity"
+                      value={formData.addressCity}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="City"
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="btn btn-outline"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Patient'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

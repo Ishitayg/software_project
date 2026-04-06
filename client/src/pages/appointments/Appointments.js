@@ -9,12 +9,24 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../contexts/AuthContext';
+import { useQueryClient } from 'react-query';
 
 const Appointments = () => {
   const { hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    patientId: '',
+    doctorId: '',
+    appointmentDate: format(new Date(), 'yyyy-MM-dd'),
+    appointmentTime: '09:00',
+    type: 'consultation',
+    notes: ''
+  });
+  const queryClient = useQueryClient();
 
   // Fetch appointments
   const { data: appointmentsData, isLoading, error } = useQuery(
@@ -65,6 +77,41 @@ const Appointments = () => {
     }
   };
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      await api.post('/appointments', formData);
+      
+      // Reset form and close modal
+      setFormData({
+        patientId: '',
+        doctorId: '',
+        appointmentDate: format(new Date(), 'yyyy-MM-dd'),
+        appointmentTime: '09:00',
+        type: 'consultation',
+        notes: ''
+      });
+      setIsModalOpen(false);
+      
+      // Refresh appointments list
+      queryClient.invalidateQueries(['appointments']);
+      
+      alert('Appointment created successfully!');
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      alert(error.response?.data?.error || 'Failed to create appointment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -101,12 +148,13 @@ const Appointments = () => {
               Manage patient appointments and schedules
             </p>
           </div>
-          {hasPermission('appointments.create') && (
-            <button className="btn btn-primary">
-              <PlusIcon className="h-4 w-4 mr-2" />
-              New Appointment
-            </button>
-          )}
+          <button 
+            className="btn btn-primary"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Appointment
+          </button>
         </div>
       </div>
 
@@ -369,6 +417,126 @@ const Appointments = () => {
           </div>
         </div>
       </div>
+
+      {/* New Appointment Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+              onClick={() => setIsModalOpen(false)}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">New Appointment</h3>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="form-label">Patient ID *</label>
+                    <input
+                      type="text"
+                      name="patientId"
+                      value={formData.patientId}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Enter patient ID"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="form-label">Doctor ID *</label>
+                    <input
+                      type="text"
+                      name="doctorId"
+                      value={formData.doctorId}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Enter doctor ID"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Date *</label>
+                    <input
+                      type="date"
+                      name="appointmentDate"
+                      value={formData.appointmentDate}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="form-label">Time *</label>
+                    <input
+                      type="time"
+                      name="appointmentTime"
+                      value={formData.appointmentTime}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="form-label">Type *</label>
+                    <select
+                      name="type"
+                      value={formData.type}
+                      onChange={handleInputChange}
+                      className="form-select"
+                      required
+                    >
+                      <option value="consultation">Consultation</option>
+                      <option value="follow_up">Follow Up</option>
+                      <option value="emergency">Emergency</option>
+                      <option value="routine_check">Routine Check</option>
+                    </select>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="form-label">Notes</label>
+                    <textarea
+                      name="notes"
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      rows="3"
+                      placeholder="Any additional notes..."
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="btn btn-outline"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Appointment'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
