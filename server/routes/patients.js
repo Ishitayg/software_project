@@ -94,8 +94,28 @@ router.get('/', authenticate, authorize('management', 'system_admin'), auditLog(
       order
     });
 
+    // Transform data to match frontend expectations
+    const transformedPatients = patients.map(p => ({
+      ...p.toJSON(),
+      personalInfo: {
+        firstName: p.firstName,
+        lastName: p.lastName,
+        dateOfBirth: p.dateOfBirth,
+        gender: p.gender,
+        phone: p.phone,
+        email: p.email,
+        address: p.address
+      },
+      registrationInfo: {
+        patientId: p.patientId,
+        status: p.status,
+        registrationDate: p.registrationDate
+      },
+      _id: p.id
+    }));
+
     res.json({
-      patients,
+      patients: transformedPatients,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(count / limit),

@@ -51,7 +51,8 @@ const Patients = () => {
       return response.data;
     },
     {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 0, // Always fetch fresh data for search
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -212,7 +213,14 @@ const Patients = () => {
             </div>
 
             <div className="flex items-end">
-              <button className="btn btn-outline w-full">
+              <button 
+                className="btn btn-outline w-full"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('');
+                  setPage(1);
+                }}
+              >
                 <FunnelIcon className="h-4 w-4 mr-2" />
                 Reset Filters
               </button>
