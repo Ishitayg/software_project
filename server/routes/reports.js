@@ -1,7 +1,7 @@
 const { Op } = require('sequelize');
 const express = require('express');
 const { query, validationResult } = require('express-validator');
-const { Appointment, Patient, Bill, InsuranceClaim, User, Clinic } = require('../models');
+const { Appointment, Patient, Bill, InsuranceClaim, User, Clinic, sequelize } = require('../models');
 const { 
   authenticate, 
   authorize, 
@@ -11,47 +11,113 @@ const {
 const router = express.Router();
 
 // Get dashboard statistics
-router.get('/dashboard', authenticate, authorize('management', 'system_admin'), auditLog('dashboard_view'), async (req, res) => {
+router.get('/dashboard', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse', 'billing', 'insurance'), auditLog('dashboard_view'), async (req, res) => {
   try {
     const { clinicId, startDate, endDate } = req.query;
     
     // Check clinic access
     const filterClinicId = req.user.role === 'system_admin' ? clinicId : req.user.clinicId;
     
-    const whereClause = { clinicId: filterClinicId };
-    if (startDate && endDate) {
-      whereClause.createdAt = {
-        [Op.gte]: new Date(startDate),
-        [Op.lte]: new Date(endDate)
-      };
-    }
-
+    // Default to last 30 days if not provided
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    
+    // Get local date string for DATEONLY fields
+    const todayStr = new Date().toISOString().split('T')[0];
+    
     // Get all statistics in parallel
     const [
-      totalAppointments,
       totalPatients,
-      totalBills,
-      totalClaims,
-      revenue
+      newPatients,
+      todayAppointments,
+      appointmentsByStatus,
+      revenue,
+      outstandingAmount,
+      outstandingCount,
+      claimStatusCounts
     ] = await Promise.all([
-      Appointment.count({ where: whereClause }),
-      Patient.count({ where: whereClause }),
-      Bill.count({ where: whereClause }),
-      InsuranceClaim.count({ where: whereClause }),
-      Bill.sum('paidAmount', { where: whereClause })
+      Patient.count({ where: { clinicId: filterClinicId } }),
+      Patient.count({ 
+        where: { 
+          clinicId: filterClinicId,
+          createdAt: { [Op.gte]: start }
+        } 
+      }),
+      Appointment.count({ 
+        where: { 
+          clinicId: filterClinicId,
+          appointmentDate: todayStr
+        }
+      }),
+      Appointment.findAll({
+        attributes: [
+          'status',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        ],
+        where: { 
+          clinicId: filterClinicId,
+          appointmentDate: { [Op.gte]: start, [Op.lte]: end }
+        },
+        group: ['status']
+      }),
+      Bill.sum('paidAmount', { 
+        where: { 
+          clinicId: filterClinicId,
+          createdAt: { [Op.gte]: start, [Op.lte]: end },
+          status: { [Op.in]: ['paid', 'partial_paid'] }
+        } 
+      }),
+      Bill.sum('balanceAmount', {
+        where: {
+          clinicId: filterClinicId,
+          status: { [Op.ne]: 'paid' }
+        }
+      }),
+      Bill.count({
+        where: {
+          clinicId: filterClinicId,
+          status: { [Op.ne]: 'paid' }
+        }
+      }),
+      InsuranceClaim.count({
+        where: { 
+          clinicId: filterClinicId,
+          status: 'submitted'
+        }
+      })
     ]);
+
+    // Format appointments by status
+    const apptStats = { total: 0, byStatus: { completed: 0, waiting: 0, scheduled: 0, in_consultation: 0, confirmed: 0, cancelled: 0, no_show: 0 } };
+    appointmentsByStatus.forEach(a => {
+      const status = a.get('status');
+      const count = parseInt(a.get('count'));
+      apptStats.byStatus[status] = count;
+      apptStats.total += count;
+    });
 
     res.json({
       dashboard: {
-        appointments: { total: totalAppointments },
-        patients: { total: totalPatients },
-        billing: { totalBills, revenue: revenue || 0 },
-        insurance: { totalClaims }
+        clinic: { todayAppointments: parseInt(todayAppointments) || 0 },
+        appointments: apptStats,
+        patients: { 
+          total: parseInt(totalPatients) || 0,
+          new: parseInt(newPatients) || 0 
+        },
+        billing: { 
+          revenue: parseFloat(revenue) || 0,
+          outstandingAmount: parseFloat(outstandingAmount) || 0,
+          outstandingBills: parseInt(outstandingCount) || 0,
+          totalBills: parseInt(outstandingCount) // Approximation
+        },
+        insurance: { 
+          byStatus: { submitted: { count: parseInt(claimStatusCounts) || 0 } }
+        }
       }
     });
   } catch (error) {
     console.error('Dashboard statistics error:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard statistics.' });
+    res.status(500).json({ error: 'Failed to fetch dashboard statistics.', details: error.message });
   }
 });
 

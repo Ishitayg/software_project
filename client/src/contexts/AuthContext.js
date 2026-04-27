@@ -249,7 +249,7 @@ export const AuthProvider = ({ children }) => {
     // Define role permissions
     const rolePermissions = {
       front_desk: ['appointments.create', 'appointments.read', 'appointments.update', 'patients.create', 'patients.read'],
-      doctor: ['appointments.read', 'patients.read', 'patients.update', 'clinical.create', 'clinical.read'],
+      doctor: ['appointments.create', 'appointments.read', 'appointments.update', 'patients.create', 'patients.read', 'patients.update', 'clinical.create', 'clinical.read'],
       nurse: ['appointments.read', 'patients.read', 'patients.update', 'vitals.create', 'vitals.read'],
       billing: ['billing.create', 'billing.read', 'billing.update', 'patients.read'],
       insurance: ['insurance.create', 'insurance.read', 'insurance.update', 'patients.read'],

@@ -11,7 +11,7 @@ const {
 const router = express.Router();
 
 // Get bills with pagination and filtering
-router.get('/', authenticate, authorize('billing', 'management', 'system_admin'), auditLog('bills_list'), async (req, res) => {
+router.get('/', authenticate, authorize('billing', 'management', 'system_admin', 'doctor'), auditLog('bills_list'), async (req, res) => {
   try {
     const { 
       page = 1, 
@@ -42,11 +42,15 @@ router.get('/', authenticate, authorize('billing', 'management', 'system_admin')
       where.patientId = patientId;
     }
 
-    if (startDate && endDate) {
-      where.createdAt = {
-        [Op.gte]: new Date(startDate),
-        [Op.lte]: new Date(endDate)
-      };
+    if (startDate || endDate) {
+      const dateFilter = {};
+      if (startDate) dateFilter[Op.gte] = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter[Op.lte] = end;
+      }
+      where.createdAt = dateFilter;
     }
 
     const offset = (page - 1) * limit;
@@ -78,7 +82,7 @@ router.get('/', authenticate, authorize('billing', 'management', 'system_admin')
 });
 
 // Get bill by ID
-router.get('/:id', authenticate, authorize('billing', 'management', 'system_admin'), auditLog('bill_view'), async (req, res) => {
+router.get('/:id', authenticate, authorize('billing', 'management', 'system_admin', 'doctor'), auditLog('bill_view'), async (req, res) => {
   try {
     const bill = await Bill.findByPk(req.params.id, {
       include: [
@@ -163,10 +167,18 @@ router.post('/', authenticate, authorize('billing', 'management', 'system_admin'
     billData.totalAmount = totalAmount;
     billData.paidAmount = 0;
     billData.balanceAmount = totalAmount;
-    billData.status = 'draft';
+    billData.status = 'generated';
 
     // Create bill
     const bill = await Bill.create(billData);
+
+    // Update appointment if linked
+    if (billData.appointmentId) {
+      await Appointment.update(
+        { billGenerated: true, billId: bill.id },
+        { where: { id: billData.appointmentId } }
+      );
+    }
 
     res.status(201).json({
       message: 'Bill created successfully.',
@@ -387,7 +399,7 @@ router.get('/outstanding/list', authenticate, authorize('billing', 'management',
 });
 
 // Get revenue statistics
-router.get('/revenue/stats', authenticate, authorize('management', 'system_admin'), async (req, res) => {
+router.get('/revenue/stats', authenticate, authorize('management', 'system_admin', 'doctor', 'billing'), async (req, res) => {
   try {
     const { clinicId, startDate, endDate } = req.query;
     

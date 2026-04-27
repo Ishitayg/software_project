@@ -276,7 +276,7 @@ router.get('/verify', authenticate, (req, res) => {
 });
 
 // Get all users (management/admin only)
-router.get('/users', authenticate, authorize('management', 'system_admin'), auditLog('users_list'), async (req, res) => {
+router.get('/users', authenticate, authorize('front_desk', 'doctor', 'management', 'system_admin'), auditLog('users_list'), async (req, res) => {
   try {
     const { page = 1, limit = 10, role, clinic, isActive } = req.query;
     const where = {};

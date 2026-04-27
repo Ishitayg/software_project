@@ -11,7 +11,7 @@ const {
 const router = express.Router();
 
 // Get appointments for a specific date and clinic
-router.get('/', authenticate, authorize('management', 'system_admin'), auditLog('appointments_list'), async (req, res) => {
+router.get('/', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), auditLog('appointments_list'), async (req, res) => {
   try {
     const { date, clinicId, doctorId, status } = req.query;
     const where = {};
@@ -53,7 +53,7 @@ router.get('/', authenticate, authorize('management', 'system_admin'), auditLog(
 });
 
 // Get appointment by ID
-router.get('/:id', authenticate, authorize('management', 'system_admin'), auditLog('appointment_view'), async (req, res) => {
+router.get('/:id', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), auditLog('appointment_view'), async (req, res) => {
   try {
     const appointment = await Appointment.findByPk(req.params.id, {
       include: [
@@ -82,7 +82,7 @@ router.get('/:id', authenticate, authorize('management', 'system_admin'), auditL
 });
 
 // Create new appointment
-router.post('/', authenticate, authorize('management', 'system_admin'), [
+router.post('/', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), [
   body('patientId').isUUID().withMessage('Valid patient ID is required'),
   body('doctorId').isUUID().withMessage('Valid doctor ID is required'),
   body('clinicId').isUUID().withMessage('Valid clinic ID is required'),
@@ -152,7 +152,7 @@ router.post('/', authenticate, authorize('management', 'system_admin'), [
 });
 
 // Update appointment
-router.put('/:id', authenticate, authorize('management', 'system_admin'), [
+router.put('/:id', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), [
   body('appointmentDate').optional().isISO8601().withMessage('Valid date is required'),
   body('appointmentTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Valid time format is required (HH:MM)'),
   body('status').optional().isIn(['scheduled', 'confirmed', 'waiting', 'in_consultation', 'completed', 'cancelled', 'no_show']).withMessage('Invalid status')
@@ -222,7 +222,7 @@ router.put('/:id', authenticate, authorize('management', 'system_admin'), [
 });
 
 // Check-in patient
-router.post('/:id/checkin', authenticate, authorize('management', 'system_admin'), auditLog('appointment_checkin'), async (req, res) => {
+router.post('/:id/checkin', authenticate, authorize('management', 'system_admin', 'front_desk', 'nurse', 'doctor'), auditLog('appointment_checkin'), async (req, res) => {
   try {
     const appointment = await Appointment.findByPk(req.params.id);
     if (!appointment) {
@@ -263,10 +263,10 @@ router.post('/:id/start-consultation', authenticate, authorize('doctor', 'system
       return res.status(404).json({ error: 'Appointment not found.' });
     }
 
-    // Check if user is the assigned doctor or system admin
+    // Check if user is in the same clinic or a system admin
     if (req.user.role !== 'system_admin' && 
-        appointment.doctorId !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied. Only the assigned doctor can start consultation.' });
+        appointment.clinicId !== req.user.clinicId) {
+      return res.status(403).json({ error: 'Access denied. Only doctors in the same clinic can start consultation.' });
     }
 
     if (appointment.status !== 'waiting') {
@@ -307,10 +307,10 @@ router.post('/:id/complete-consultation', authenticate, authorize('doctor', 'sys
       return res.status(404).json({ error: 'Appointment not found.' });
     }
 
-    // Check if user is the assigned doctor or system admin
+    // Check if user is in the same clinic or a system admin
     if (req.user.role !== 'system_admin' && 
-        appointment.doctorId !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied. Only the assigned doctor can complete consultation.' });
+        appointment.clinicId !== req.user.clinicId) {
+      return res.status(403).json({ error: 'Access denied. Only doctors in the same clinic can complete consultation.' });
     }
 
     if (appointment.status !== 'in_consultation') {
@@ -322,6 +322,7 @@ router.post('/:id/complete-consultation', authenticate, authorize('doctor', 'sys
     if (req.body.diagnosis) appointment.diagnosis = req.body.diagnosis;
     if (req.body.prescription) appointment.prescription = req.body.prescription;
     if (req.body.followUpDate) appointment.followUpDate = req.body.followUpDate;
+    if (req.body.consultationDocuments) appointment.consultationDocuments = req.body.consultationDocuments;
     if (req.body.vitals) appointment.vitals = req.body.vitals;
     
     appointment.consultationEndTime = new Date();
@@ -340,7 +341,7 @@ router.post('/:id/complete-consultation', authenticate, authorize('doctor', 'sys
 });
 
 // Cancel appointment
-router.post('/:id/cancel', authenticate, authorize('management', 'system_admin'), [
+router.post('/:id/cancel', authenticate, authorize('management', 'system_admin', 'front_desk', 'doctor', 'nurse'), [
   body('reason').trim().notEmpty().withMessage('Cancellation reason is required')
 ], auditLog('appointment_cancel'), async (req, res) => {
   try {
@@ -381,7 +382,7 @@ router.post('/:id/cancel', authenticate, authorize('management', 'system_admin')
 });
 
 // Get available time slots for a doctor on a specific date
-router.get('/available-slots', authenticate, authorize('management', 'system_admin'), async (req, res) => {
+router.get('/available-slots', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), async (req, res) => {
   try {
     const { clinicId, doctorId, date } = req.query;
 
@@ -447,6 +448,31 @@ router.get('/available-slots', authenticate, authorize('management', 'system_adm
   } catch (error) {
     console.error('Available slots error:', error);
     res.status(500).json({ error: 'Failed to fetch available slots.' });
+  }
+});
+
+// Delete appointment
+router.delete('/:id', authenticate, authorize('management', 'system_admin'), auditLog('appointment_delete'), async (req, res) => {
+  try {
+    const appointment = await Appointment.findByPk(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found.' });
+    }
+
+    // Check clinic access
+    if (req.user.role !== 'system_admin' && 
+        appointment.clinicId !== req.user.clinicId) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    await appointment.destroy();
+
+    res.json({
+      message: 'Appointment deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Delete appointment error:', error);
+    res.status(500).json({ error: 'Failed to delete appointment.' });
   }
 });
 

@@ -88,6 +88,21 @@ const Reports = () => {
     }
   );
 
+  const { data: peakHoursData, isLoading: peakHoursLoading } = useQuery(
+    ['peak-hours', dateRange],
+    async () => {
+      const params = new URLSearchParams();
+      params.append('startDate', dateRange.startDate);
+      params.append('endDate', dateRange.endDate);
+      
+      const response = await api.get(`/reports/peak-hours?${params}`);
+      return response.data.peakHours;
+    },
+    {
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+
   const handleExport = async (reportType, format) => {
     try {
       const params = new URLSearchParams();
@@ -107,11 +122,11 @@ const Reports = () => {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export error:', error);
+      console.error('Export error:', reportType, error);
     }
   };
 
-  const isLoading = dashboardLoading || utilizationLoading || performanceLoading || revenueLoading;
+  const isLoading = dashboardLoading || utilizationLoading || performanceLoading || revenueLoading || peakHoursLoading;
 
   if (isLoading) {
     return (
@@ -202,10 +217,6 @@ const Reports = () => {
                         <div className="text-2xl font-semibold text-gray-900">
                           {dashboardData?.appointments?.total || 0}
                         </div>
-                        <div className="ml-2 flex items-baseline text-sm font-semibold text-green-600">
-                          <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
-                          12%
-                        </div>
                       </dd>
                     </dl>
                   </div>
@@ -227,10 +238,6 @@ const Reports = () => {
                       <dd className="flex items-baseline">
                         <div className="text-2xl font-semibold text-gray-900">
                           {dashboardData?.patients?.new || 0}
-                        </div>
-                        <div className="ml-2 flex items-baseline text-sm font-semibold text-green-600">
-                          <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
-                          8%
                         </div>
                       </dd>
                     </dl>
@@ -254,10 +261,6 @@ const Reports = () => {
                         <div className="text-2xl font-semibold text-gray-900">
                           ₹{dashboardData?.billing?.revenue?.toLocaleString() || 0}
                         </div>
-                        <div className="ml-2 flex items-baseline text-sm font-semibold text-green-600">
-                          <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
-                          15%
-                        </div>
                       </dd>
                     </dl>
                   </div>
@@ -278,12 +281,8 @@ const Reports = () => {
                       </dt>
                       <dd className="flex items-baseline">
                         <div className="text-2xl font-semibold text-gray-900">
-                          {dashboardData?.appointments?.byStatus?.completed ? 
+                          {dashboardData?.appointments?.total > 0 ? 
                             Math.round((dashboardData.appointments.byStatus.completed / dashboardData.appointments.total) * 100) : 0}%
-                        </div>
-                        <div className="ml-2 flex items-baseline text-sm font-semibold text-red-600">
-                          <ArrowTrendingDownIcon className="h-4 w-4 mr-1" />
-                          3%
                         </div>
                       </dd>
                     </dl>
@@ -291,6 +290,7 @@ const Reports = () => {
                 </div>
               </div>
             </div>
+
           </div>
 
           {/* Export Options */}
@@ -354,23 +354,33 @@ const Reports = () => {
                 <h4 className="text-lg font-medium text-gray-900">Peak Hours Analysis</h4>
               </div>
               <div className="card-body">
-                <div className="space-y-3">
-                  {['9:00 AM - 11:00 AM', '2:00 PM - 4:00 PM', '5:00 PM - 7:00 PM'].map((time, index) => (
-                    <div key={time} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{time}</span>
-                      <div className="flex items-center">
-                        <div className="w-32 bg-gray-200 rounded-full h-2 mr-3">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full" 
-                            style={{ width: `${Math.max(20, 100 - index * 20)}%` }}
-                          ></div>
+                <div className="space-y-4">
+                  {peakHoursData?.length > 0 ? (
+                    peakHoursData.slice(0, 5).map((item, index) => {
+                      const hourStr = `${item.hour}:00 - ${item.hour + 1}:00`;
+                      const maxCount = Math.max(...peakHoursData.map(p => p.count));
+                      const percentage = Math.round((item.count / maxCount) * 100);
+                      
+                      return (
+                        <div key={item.hour} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">{hourStr}</span>
+                            <span className="text-xs font-black text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{item.count} appointments</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div 
+                              className="bg-primary-500 h-1.5 rounded-full transition-all duration-500" 
+                              style={{ width: `${percentage}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">
-                          {Math.max(20, 100 - index * 20)}%
-                        </span>
-                      </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-6">
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest italic">No peak hour data for selection</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
@@ -534,7 +544,7 @@ const Reports = () => {
                       </dt>
                       <dd className="flex items-baseline">
                         <div className="text-2xl font-semibold text-gray-900">
-                          ₹{(dashboardData?.billing?.outstandingBills * 1500).toLocaleString() || 0}
+                          ₹{(dashboardData?.billing?.outstandingAmount || 0).toLocaleString()}
                         </div>
                       </dd>
                     </dl>
@@ -557,7 +567,7 @@ const Reports = () => {
                       <dd className="flex items-baseline">
                         <div className="text-2xl font-semibold text-gray-900">
                           ₹{dashboardData?.billing?.revenue ? 
-                            Math.round(dashboardData.billing.revenue / (dashboardData.billing.totalBills || 1)).toLocaleString() : 0}
+                            Math.round(dashboardData.billing.revenue / (dashboardData.billing.billCount || 1)).toLocaleString() : 0}
                         </div>
                       </dd>
                     </dl>
@@ -575,11 +585,11 @@ const Reports = () => {
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">
-                        Growth Rate
+                        Active Bills
                       </dt>
                       <dd className="flex items-baseline">
                         <div className="text-2xl font-semibold text-gray-900">
-                          +15%
+                          {dashboardData?.billing?.outstandingBills || 0}
                         </div>
                       </dd>
                     </dl>
@@ -597,11 +607,11 @@ const Reports = () => {
               </p>
             </div>
             <div className="card-body">
-              <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                <div className="text-center text-gray-500">
-                  <ChartBarIcon className="h-12 w-12 mx-auto mb-4" />
-                  <p>Revenue trend chart would be rendered here</p>
-                  <p className="text-sm mt-2">Using Recharts or similar library</p>
+              <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                <div className="text-center text-gray-400">
+                  <ChartBarIcon className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="font-medium">Revenue Analysis Visualizer</p>
+                  <p className="text-xs">Select data range above to refresh trend analysis</p>
                 </div>
               </div>
             </div>
@@ -609,6 +619,7 @@ const Reports = () => {
         </div>
       )}
     </div>
+
   );
 };
 

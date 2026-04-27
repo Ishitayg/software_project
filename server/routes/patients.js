@@ -45,7 +45,7 @@ const upload = multer({
 });
 
 // Get patients with pagination and filtering
-router.get('/', authenticate, authorize('management', 'system_admin'), auditLog('patients_list'), async (req, res) => {
+router.get('/', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), auditLog('patients_list'), async (req, res) => {
   try {
     const { 
       page = 1, 
@@ -129,7 +129,7 @@ router.get('/', authenticate, authorize('management', 'system_admin'), auditLog(
 });
 
 // Get patient by ID
-router.get('/:id', authenticate, authorize('management', 'system_admin'), auditLog('patient_view'), async (req, res) => {
+router.get('/:id', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), auditLog('patient_view'), async (req, res) => {
   try {
     const patient = await Patient.findByPk(req.params.id, {
       include: [
@@ -155,7 +155,7 @@ router.get('/:id', authenticate, authorize('management', 'system_admin'), auditL
 });
 
 // Create new patient
-router.post('/', authenticate, authorize('management', 'system_admin'), [
+router.post('/', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), [
   body('firstName').trim().notEmpty().withMessage('First name is required'),
   body('lastName').trim().notEmpty().withMessage('Last name is required'),
   body('dateOfBirth').isISO8601().withMessage('Valid date of birth is required'),
@@ -214,7 +214,7 @@ router.post('/', authenticate, authorize('management', 'system_admin'), [
 });
 
 // Update patient
-router.put('/:id', authenticate, authorize('management', 'system_admin'), [
+router.put('/:id', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), [
   body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
   body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
   body('phone').optional().trim().isMobilePhone().withMessage('Valid phone number is required'),
@@ -267,7 +267,7 @@ router.put('/:id', authenticate, authorize('management', 'system_admin'), [
 });
 
 // Upload patient document
-router.post('/:id/documents', authenticate, authorize('management', 'system_admin'), 
+router.post('/:id/documents', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), 
   upload.single('document'), 
   auditLog('patient_document_upload'), 
   async (req, res) => {
@@ -362,7 +362,7 @@ router.delete('/:id/documents/:documentId', authenticate, authorize('management'
 );
 
 // Get patient statistics
-router.get('/:id/statistics', authenticate, authorize('management', 'system_admin'), async (req, res) => {
+router.get('/:id/statistics', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk', 'nurse'), async (req, res) => {
   try {
     const patient = await Patient.findByPk(req.params.id);
     if (!patient) {
@@ -405,7 +405,7 @@ router.get('/:id/statistics', authenticate, authorize('management', 'system_admi
 });
 
 // Search patients (for autocomplete/typeahead)
-router.get('/search/query', authenticate, authorize('management', 'system_admin'), async (req, res) => {
+router.get('/search/query', authenticate, authorize('management', 'system_admin', 'doctor', 'front_desk'), async (req, res) => {
   try {
     const { q, limit = 10 } = req.query;
 
