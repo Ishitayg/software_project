@@ -34,6 +34,7 @@ const Patients = () => {
     clinicId: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewPatient, setViewPatient] = useState(null);
 
   const queryClient = useQueryClient();
 
@@ -301,7 +302,10 @@ const Patients = () => {
                       </td>
                       <td className="table-cell">
                         <div className="flex space-x-2">
-                          <button className="btn btn-sm btn-outline">
+                          <button 
+                            className="btn btn-sm btn-outline"
+                            onClick={() => setViewPatient(patient)}
+                          >
                             View
                           </button>
                           {hasPermission('patients.update') && (
@@ -598,6 +602,121 @@ const Patients = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Patient Modal */}
+      {viewPatient && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+              onClick={() => setViewPatient(null)}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Patient Details</h3>
+                <button 
+                  onClick={() => setViewPatient(null)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Personal Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Full Name</label>
+                        <p className="text-gray-900 font-medium">{viewPatient.personalInfo?.firstName} {viewPatient.personalInfo?.lastName}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Date of Birth</label>
+                        <p className="text-gray-900">{viewPatient.personalInfo?.dateOfBirth}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Gender</label>
+                        <p className="text-gray-900 capitalize">{viewPatient.personalInfo?.gender}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Age</label>
+                        <p className="text-gray-900">{getAge(viewPatient.personalInfo?.dateOfBirth)} years</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Contact Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Phone</label>
+                        <p className="text-gray-900">{viewPatient.personalInfo?.phone || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Email</label>
+                        <p className="text-gray-900">{viewPatient.personalInfo?.email || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Address</label>
+                        <p className="text-gray-900">{viewPatient.personalInfo?.address || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Registration Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Patient ID</label>
+                        <p className="text-gray-900 font-mono">{viewPatient.registrationInfo?.patientId || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Status</label>
+                        <span className={`badge ${getStatusColor(viewPatient.registrationInfo?.status)} capitalize`}>
+                          {viewPatient.registrationInfo?.status}
+                        </span>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Registration Date</label>
+                        <p className="text-gray-900">{viewPatient.registrationInfo?.registrationDate || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">System Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Internal ID</label>
+                        <p className="text-gray-500 text-sm font-mono">{viewPatient.id}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Clinic ID</label>
+                        <p className="text-gray-500 text-sm font-mono">{viewPatient.clinicId}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 flex justify-end">
+                  <button
+                    onClick={() => setViewPatient(null)}
+                    className="btn btn-outline"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
